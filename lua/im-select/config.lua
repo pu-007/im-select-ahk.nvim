@@ -12,20 +12,27 @@ M.defaults = {
   -- SendMessageTimeoutW timeout in ms (passed to im-select.exe --timeout)
   ime_timeout = 500,
 
-  -- Switch to English when leaving Insert mode
-  set_en_on_insert_leave = true,
-
-  -- Restore previous IME state when entering Insert mode
-  restore_on_insert_enter = true,
-
-  -- Switch to English when entering Command-line mode (:, /, ?)
-  set_en_on_cmdline_enter = true,
-
   -- Use async execution (recommended, avoids blocking Neovim)
   async = true,
 
   -- Timeout in milliseconds for sync io.popen calls
   timeout = 200,
+
+  -- Per-mode IME behavior configuration
+  -- Options:
+  --   "always_en" - always switch to English when entering/in this mode
+  --   "restore"   - save and restore IME state for this mode (remembers previous state)
+  --   false/nil   - no IME switching for this mode
+  mode_config = {
+    normal   = "always_en",  -- Always English in Normal mode for smooth editing
+    insert   = "restore",    -- Remember and restore IME state in Insert mode
+    cmdline  = "restore",    -- Remember and restore IME state in Command-line mode (:)
+    search   = "restore",    -- Remember and restore IME state in Search mode (/, ?)
+    visual   = false,        -- No action in Visual mode
+    replace  = "restore",    -- Remember and restore IME state in Replace mode
+    terminal = false,        -- No action in Terminal mode
+    select   = false,        -- No action in Select mode
+  },
 }
 
 M.options = {}

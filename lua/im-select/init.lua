@@ -4,11 +4,8 @@ local config = require("im-select.config")
 
 local M = {}
 
--- Buffer-local saved IME state
-local saved_im = {}
-
--- Saved IME state before entering cmdline/search mode
-local saved_im_before_cmdline = {}
+-- Buffer-local saved IME state for each mode
+local saved_im_state = {}
 
 -- Build the command string for im-select.exe
 local function build_cmd(args)
@@ -146,98 +143,143 @@ function M.check()
   end
 end
 
--- Save IME state for a buffer
-local function save_state(bufnr, state)
-  saved_im[bufnr] = state
+-- Save IME state for a specific mode
+local function save_state_for_mode(bufnr, mode, state)
+  if not saved_im_state[bufnr] then
+    saved_im_state[bufnr] = {}
+  end
+  saved_im_state[bufnr][mode] = state
 end
 
--- Get saved IME state for a buffer
-local function get_saved_state(bufnr)
-  return saved_im[bufnr]
+-- Get saved IME state for a specific mode
+local function get_saved_state_for_mode(bufnr, mode)
+  if saved_im_state[bufnr] then
+    return saved_im_state[bufnr][mode]
+  end
+  return nil
 end
 
--- Called on InsertLeave: save current state, switch to English
-function M.on_insert_leave()
-  if not config.options.set_en_on_insert_leave then return end
+-- Get mode config for a given mode name
+local function get_mode_config(mode_name)
+  local mode_cfg = config.options.mode_config
+  if mode_cfg and mode_cfg[mode_name] then
+    return mode_cfg[mode_name]
+  end
+  return nil
+end
+
+-- Handle mode-specific IME switching
+local function handle_mode_ime(mode_name, entering)
   local bufnr = vim.api.nvim_get_current_buf()
+  local mode_cfg = get_mode_config(mode_name)
 
-  if config.options.async then
-    exec_async("get", function(result)
-      if result then
-        save_state(bufnr, result)
-        if result == "zh" then
+  if not mode_cfg then return end
+
+  if entering then
+    -- Entering a mode
+    if mode_cfg == "always_en" then
+      -- Always switch to English
+      if config.options.async then
+        exec_async("get", function(result)
+          if result then
+            save_state_for_mode(bufnr, mode_name, result)
+          end
           exec_async("set en", nil)
+        end)
+      else
+        local current = exec_sync("get")
+        if current then
+          save_state_for_mode(bufnr, mode_name, current)
         end
-      end
-    end)
-  else
-    local current = exec_sync("get")
-    if current then
-      save_state(bufnr, current)
-      if current == "zh" then
         exec_sync("set en")
       end
-    end
-  end
-end
-
--- Called on InsertEnter: restore saved state
-function M.on_insert_enter()
-  if not config.options.restore_on_insert_enter then return end
-  local bufnr = vim.api.nvim_get_current_buf()
-  local prev = get_saved_state(bufnr)
-
-  if prev and prev == "zh" then
-    if config.options.async then
-      exec_async("set zh", nil)
-    else
-      exec_sync("set zh")
-    end
-  end
-end
-
--- Called on CmdlineEnter: save current IME state and switch to English
-function M.on_cmdline_enter()
-  if not config.options.set_en_on_cmdline_enter then return end
-  local bufnr = vim.api.nvim_get_current_buf()
-  
-  -- Save current IME state before entering cmdline
-  if config.options.async then
-    exec_async("get", function(result)
-      if result then
-        saved_im_before_cmdline[bufnr] = result
+    elseif mode_cfg == "restore" then
+      -- Save current state for later restoration
+      if config.options.async then
+        exec_async("get", function(result)
+          if result then
+            save_state_for_mode(bufnr, mode_name, result)
+          end
+        end)
+      else
+        local current = exec_sync("get")
+        if current then
+          save_state_for_mode(bufnr, mode_name, current)
+        end
       end
-      exec_async("set en", nil)
-    end)
-  else
-    local current = exec_sync("get")
-    if current then
-      saved_im_before_cmdline[bufnr] = current
     end
-    exec_sync("set en")
-  end
-end
-
--- Called on CmdlineLeave: switch back to English (ensure normal mode uses English)
-function M.on_cmdline_leave()
-  if not config.options.set_en_on_cmdline_enter then return end
-  if config.options.async then
-    exec_async("set en", nil)
   else
-    exec_sync("set en")
+    -- Leaving a mode
+    if mode_cfg == "always_en" then
+      -- Ensure English when leaving
+      if config.options.async then
+        exec_async("set en", nil)
+      else
+        exec_sync("set en")
+      end
+    elseif mode_cfg == "restore" then
+      -- Restore saved state
+      local saved = get_saved_state_for_mode(bufnr, mode_name)
+      if saved and saved == "zh" then
+        if config.options.async then
+          exec_async("set zh", nil)
+        else
+          exec_sync("set zh")
+        end
+      else
+        -- Default to English if no saved state
+        if config.options.async then
+          exec_async("set en", nil)
+        else
+          exec_sync("set en")
+        end
+      end
+    end
   end
 end
 
--- Called on ModeChanged: when returning to Normal mode, switch to English
+-- Called on InsertEnter
+function M.on_insert_enter()
+  handle_mode_ime("insert", true)
+end
+
+-- Called on InsertLeave
+function M.on_insert_leave()
+  handle_mode_ime("insert", false)
+end
+
+-- Called on CmdlineEnter
+function M.on_cmdline_enter()
+  handle_mode_ime("cmdline", true)
+end
+
+-- Called on CmdlineLeave
+function M.on_cmdline_leave()
+  handle_mode_ime("cmdline", false)
+end
+
+-- Called on ModeChanged to handle search mode and normal mode
 function M.on_mode_changed()
   local mode = vim.fn.mode()
-  -- Only switch to English when entering Normal mode (n)
-  if mode == "n" then
-    if config.options.async then
-      exec_async("set en", nil)
-    else
-      exec_sync("set en")
-    end
+  
+  -- Handle search mode (/ or ?)
+  if mode == "/" or mode == "?" then
+    handle_mode_ime("search", true)
+  -- Handle normal mode
+  elseif mode == "n" then
+    handle_mode_ime("normal", true)
+  -- Handle visual mode
+  elseif mode == "v" or mode == "V" or mode == "\22" then
+    handle_mode_ime("visual", true)
+  -- Handle replace mode
+  elseif mode == "R" then
+    handle_mode_ime("replace", true)
+  -- Handle terminal mode
+  elseif mode == "t" then
+    handle_mode_ime("terminal", true)
+  -- Handle select mode
+  elseif mode == "s" or mode == "S" or mode == "\19" then
+    handle_mode_ime("select", true)
   end
 end
 
@@ -248,39 +290,52 @@ function M.setup(opts)
   -- Create autocommand group
   local group = vim.api.nvim_create_augroup("im_select", { clear = true })
 
-  if config.options.set_en_on_insert_leave then
-    vim.api.nvim_create_autocmd("InsertLeave", {
-      group = group,
-      callback = M.on_insert_leave,
-      desc = "im-select: switch to English on InsertLeave",
-    })
-  end
-
-  if config.options.restore_on_insert_enter then
+  -- Insert mode autocommands
+  local insert_cfg = get_mode_config("insert")
+  if insert_cfg then
     vim.api.nvim_create_autocmd("InsertEnter", {
       group = group,
       callback = M.on_insert_enter,
-      desc = "im-select: restore IME state on InsertEnter",
+      desc = "im-select: handle IME on InsertEnter",
+    })
+
+    vim.api.nvim_create_autocmd("InsertLeave", {
+      group = group,
+      callback = M.on_insert_leave,
+      desc = "im-select: handle IME on InsertLeave",
     })
   end
 
-  if config.options.set_en_on_cmdline_enter then
+  -- Cmdline mode autocommands
+  local cmdline_cfg = get_mode_config("cmdline")
+  if cmdline_cfg then
     vim.api.nvim_create_autocmd("CmdlineEnter", {
       group = group,
       callback = M.on_cmdline_enter,
-      desc = "im-select: switch to English on Command-line mode",
+      desc = "im-select: handle IME on CmdlineEnter",
     })
 
     vim.api.nvim_create_autocmd("CmdlineLeave", {
       group = group,
       callback = M.on_cmdline_leave,
-      desc = "im-select: switch to English on CmdlineLeave",
+      desc = "im-select: handle IME on CmdlineLeave",
     })
+  end
 
+  -- ModeChanged autocommand for all other modes
+  local has_mode_changed = false
+  for mode_name, mode_cfg in pairs(config.options.mode_config) do
+    if mode_cfg and mode_name ~= "insert" and mode_name ~= "cmdline" then
+      has_mode_changed = true
+      break
+    end
+  end
+
+  if has_mode_changed then
     vim.api.nvim_create_autocmd("ModeChanged", {
       group = group,
       callback = M.on_mode_changed,
-      desc = "im-select: switch to English on returning to Normal mode",
+      desc = "im-select: handle IME on mode changes",
     })
   end
 
@@ -288,7 +343,7 @@ function M.setup(opts)
   vim.api.nvim_create_autocmd("BufDelete", {
     group = group,
     callback = function(ev)
-      saved_im[ev.buf] = nil
+      saved_im_state[ev.buf] = nil
     end,
     desc = "im-select: clean up saved IME state",
   })
