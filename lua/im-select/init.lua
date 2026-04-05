@@ -149,13 +149,20 @@ local function save_state_for_mode(bufnr, mode, state)
     saved_im_state[bufnr] = {}
   end
   saved_im_state[bufnr][mode] = state
+  vim.notify(string.format("[DEBUG] save_state_for_mode: bufnr=%d, mode=%s, state=%s, all_states=%s",
+    bufnr, mode, tostring(state), vim.inspect(saved_im_state[bufnr])), vim.log.levels.DEBUG)
 end
 
 -- Get saved IME state for a specific mode
 local function get_saved_state_for_mode(bufnr, mode)
   if saved_im_state[bufnr] then
-    return saved_im_state[bufnr][mode]
+    local state = saved_im_state[bufnr][mode]
+    vim.notify(string.format("[DEBUG] get_saved_state_for_mode: bufnr=%d, mode=%s, state=%s, all_states=%s",
+      bufnr, mode, tostring(state), vim.inspect(saved_im_state[bufnr])), vim.log.levels.DEBUG)
+    return state
   end
+  vim.notify(string.format("[DEBUG] get_saved_state_for_mode: bufnr=%d, mode=%s, no saved states for this buffer",
+    bufnr, mode), vim.log.levels.DEBUG)
   return nil
 end
 
@@ -175,36 +182,48 @@ local function handle_mode_ime(mode_name, entering)
 
   if not mode_cfg then return end
 
+  vim.notify(string.format("[DEBUG] handle_mode_ime: mode=%s, entering=%s, bufnr=%d, cfg=%s",
+    mode_name, tostring(entering), bufnr, tostring(mode_cfg)), vim.log.levels.DEBUG)
+
   if entering then
     -- Entering a mode
     if mode_cfg == "always_en" then
       -- Always switch to English
       if config.options.async then
         exec_async("get", function(result)
+          vim.notify(string.format("[DEBUG] always_en entering: got current state=%s", tostring(result)), vim.log.levels.DEBUG)
           if result then
             save_state_for_mode(bufnr, mode_name, result)
+            vim.notify(string.format("[DEBUG] saved state for mode %s: %s", mode_name, result), vim.log.levels.DEBUG)
           end
           exec_async("set en", nil)
         end)
       else
         local current = exec_sync("get")
+        vim.notify(string.format("[DEBUG] always_en entering (sync): got current state=%s", tostring(current)), vim.log.levels.DEBUG)
         if current then
           save_state_for_mode(bufnr, mode_name, current)
+          vim.notify(string.format("[DEBUG] saved state for mode %s: %s", mode_name, current), vim.log.levels.DEBUG)
         end
         exec_sync("set en")
       end
     elseif mode_cfg == "restore" then
-      -- Save current state for later restoration
-      if config.options.async then
-        exec_async("get", function(result)
-          if result then
-            save_state_for_mode(bufnr, mode_name, result)
-          end
-        end)
+      -- Entering mode: restore saved state if any
+      local saved = get_saved_state_for_mode(bufnr, mode_name)
+      vim.notify(string.format("[DEBUG] restore entering: saved state for mode %s = %s", mode_name, tostring(saved)), vim.log.levels.DEBUG)
+      if saved and saved == "zh" then
+        vim.notify(string.format("[DEBUG] restoring to zh"), vim.log.levels.DEBUG)
+        if config.options.async then
+          exec_async("set zh", nil)
+        else
+          exec_sync("set zh")
+        end
       else
-        local current = exec_sync("get")
-        if current then
-          save_state_for_mode(bufnr, mode_name, current)
+        vim.notify(string.format("[DEBUG] no saved state or not zh, defaulting to en"), vim.log.levels.DEBUG)
+        if config.options.async then
+          exec_async("set en", nil)
+        else
+          exec_sync("set en")
         end
       end
     end
@@ -212,26 +231,26 @@ local function handle_mode_ime(mode_name, entering)
     -- Leaving a mode
     if mode_cfg == "always_en" then
       -- Ensure English when leaving
+      vim.notify(string.format("[DEBUG] always_en leaving: setting to en"), vim.log.levels.DEBUG)
       if config.options.async then
         exec_async("set en", nil)
       else
         exec_sync("set en")
       end
     elseif mode_cfg == "restore" then
-      -- Restore saved state
-      local saved = get_saved_state_for_mode(bufnr, mode_name)
-      if saved and saved == "zh" then
-        if config.options.async then
-          exec_async("set zh", nil)
-        else
-          exec_sync("set zh")
-        end
+      -- Leaving mode: save current state
+      if config.options.async then
+        exec_async("get", function(result)
+          if result then
+            save_state_for_mode(bufnr, mode_name, result)
+            vim.notify(string.format("[DEBUG] saved state for mode %s on leave: %s", mode_name, result), vim.log.levels.DEBUG)
+          end
+        end)
       else
-        -- Default to English if no saved state
-        if config.options.async then
-          exec_async("set en", nil)
-        else
-          exec_sync("set en")
+        local current = exec_sync("get")
+        if current then
+          save_state_for_mode(bufnr, mode_name, current)
+          vim.notify(string.format("[DEBUG] saved state for mode %s on leave: %s", mode_name, current), vim.log.levels.DEBUG)
         end
       end
     end
@@ -280,6 +299,13 @@ function M.on_mode_changed()
   -- Handle select mode
   elseif mode == "s" or mode == "S" or mode == "\19" then
     handle_mode_ime("select", true)
+  else
+    -- Leaving other modes: handle leaving for search, visual, replace, terminal, select
+    handle_mode_ime("search", false)
+    handle_mode_ime("visual", false)
+    handle_mode_ime("replace", false)
+    handle_mode_ime("terminal", false)
+    handle_mode_ime("select", false)
   end
 end
 
