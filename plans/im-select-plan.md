@@ -44,6 +44,7 @@ SendMessageTimeoutW(imeWnd, 0x283, wParam, 0) → 读取/设置状态
 ```
 
 关键区别:
+
 1. 使用 `GetGUIThreadInfo` 获取真正的焦点控件，而非 `GetForegroundWindow`
 2. 通过 `ImmGetDefaultIMEWnd` 获取 IME 窗口句柄
 3. 使用 `SendMessageTimeoutW` 发送 `WM_IME_CONTROL` (0x283) 消息
@@ -51,12 +52,12 @@ SendMessageTimeoutW(imeWnd, 0x283, wParam, 0) → 读取/设置状态
 
 ### WM_IME_CONTROL 消息参数
 
-| wParam | 功能 | 说明 |
-|--------|------|------|
-| 0x5 | GetOpenStatus | 获取状态码 (0=关闭/英文, 非0=开启) |
-| 0x1 | GetConversionMode | 获取切换码 (bit0=1 表示中文模式) |
-| 0x6 | SetOpenStatus | 设置状态码 (lParam: 0=关闭, 1=开启) |
-| 0x2 | SetConversionMode | 设置切换码 (lParam: mode value) |
+| wParam | 功能              | 说明                                |
+| ------ | ----------------- | ----------------------------------- |
+| 0x5    | GetOpenStatus     | 获取状态码 (0=关闭/英文, 非0=开启)  |
+| 0x1    | GetConversionMode | 获取切换码 (bit0=1 表示中文模式)    |
+| 0x6    | SetOpenStatus     | 设置状态码 (lParam: 0=关闭, 1=开启) |
+| 0x2    | SetConversionMode | 设置切换码 (lParam: mode value)     |
 
 ### 通用模式判断逻辑
 
@@ -175,12 +176,12 @@ im-select.nvim/
 
 ## Part 3: 文件清单
 
-| 文件 | 说明 |
-|------|------|
-| `ahk/im-select.ahk` | AHK v2 源码 (v2 重构，InputTip 技术) |
-| `lua/im-select/init.lua` | 插件主入口 |
-| `lua/im-select/config.lua` | 默认配置 |
-| `README.md` | 安装和使用文档 |
+| 文件                       | 说明                                 |
+| -------------------------- | ------------------------------------ |
+| `ahk/im-select.ahk`        | AHK v2 源码 (v2 重构，InputTip 技术) |
+| `lua/im-select/init.lua`   | 插件主入口                           |
+| `lua/im-select/config.lua` | 默认配置                             |
+| `README.md`                | 安装和使用文档                       |
 
 ---
 
