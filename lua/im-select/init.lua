@@ -7,6 +7,9 @@ local M = {}
 -- Buffer-local saved IME state
 local saved_im = {}
 
+-- Saved IME state before entering cmdline/search mode
+local saved_im_before_cmdline = {}
+
 -- Build the command string for im-select.exe
 local function build_cmd(args)
   local opts = config.options
@@ -193,13 +196,48 @@ function M.on_insert_enter()
   end
 end
 
--- Called on CmdlineEnter: switch to English
+-- Called on CmdlineEnter: save current IME state and switch to English
 function M.on_cmdline_enter()
+  if not config.options.set_en_on_cmdline_enter then return end
+  local bufnr = vim.api.nvim_get_current_buf()
+  
+  -- Save current IME state before entering cmdline
+  if config.options.async then
+    exec_async("get", function(result)
+      if result then
+        saved_im_before_cmdline[bufnr] = result
+      end
+      exec_async("set en", nil)
+    end)
+  else
+    local current = exec_sync("get")
+    if current then
+      saved_im_before_cmdline[bufnr] = current
+    end
+    exec_sync("set en")
+  end
+end
+
+-- Called on CmdlineLeave: switch back to English (ensure normal mode uses English)
+function M.on_cmdline_leave()
   if not config.options.set_en_on_cmdline_enter then return end
   if config.options.async then
     exec_async("set en", nil)
   else
     exec_sync("set en")
+  end
+end
+
+-- Called on ModeChanged: when returning to Normal mode, switch to English
+function M.on_mode_changed()
+  local mode = vim.fn.mode()
+  -- Only switch to English when entering Normal mode (n)
+  if mode == "n" then
+    if config.options.async then
+      exec_async("set en", nil)
+    else
+      exec_sync("set en")
+    end
   end
 end
 
@@ -231,6 +269,18 @@ function M.setup(opts)
       group = group,
       callback = M.on_cmdline_enter,
       desc = "im-select: switch to English on Command-line mode",
+    })
+
+    vim.api.nvim_create_autocmd("CmdlineLeave", {
+      group = group,
+      callback = M.on_cmdline_leave,
+      desc = "im-select: switch to English on CmdlineLeave",
+    })
+
+    vim.api.nvim_create_autocmd("ModeChanged", {
+      group = group,
+      callback = M.on_mode_changed,
+      desc = "im-select: switch to English on returning to Normal mode",
     })
   end
 
