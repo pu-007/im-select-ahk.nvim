@@ -176,10 +176,25 @@ end
 -- Get mode config for a given mode name
 local function get_mode_config(mode_name)
   local mode_cfg = config.options.mode_config
-  if mode_cfg and mode_cfg[mode_name] then
-    return mode_cfg[mode_name]
+  if not mode_cfg then
+    debug_log(string.format("get_mode_config: mode_cfg is nil for mode=%s", mode_name))
+    return nil
   end
-  return nil
+
+  -- Map specialized mode names to base config keys
+  if mode_name == "search_slash" or mode_name == "search_question" then
+    local result = mode_cfg["search"]
+    debug_log(string.format("get_mode_config: mapped %s -> search, result=%s", mode_name, tostring(result)))
+    return result
+  elseif mode_name == "cmdline_colon" then
+    local result = mode_cfg["cmdline"]
+    debug_log(string.format("get_mode_config: mapped %s -> cmdline, result=%s", mode_name, tostring(result)))
+    return result
+  end
+
+  local result = mode_cfg[mode_name]
+  debug_log(string.format("get_mode_config: direct lookup for mode=%s, result=%s", mode_name, tostring(result)))
+  return result
 end
 
 -- Handle mode-specific IME switching
@@ -276,27 +291,33 @@ end
 
 -- Called on CmdlineEnter
 function M.on_cmdline_enter()
-  local mode = vim.fn.mode()
-  if mode == "/" then
+  local cmd_type = vim.fn.getcmdtype()
+  if cmd_type == "/" then
     -- For forward search mode
     handle_mode_ime("search_slash", true)
-  elseif mode == "?" then
+  elseif cmd_type == "?" then
     -- For backward search mode
     handle_mode_ime("search_question", true)
-  else
+  elseif cmd_type == ":" then
     -- For command line (colon) mode
+    handle_mode_ime("cmdline_colon", true)
+  else
+    -- Fallback to cmdline_colon for unknown types
     handle_mode_ime("cmdline_colon", true)
   end
 end
 
 -- Called on CmdlineLeave
 function M.on_cmdline_leave()
-  local mode = vim.fn.mode()
-  if mode == "/" then
+  local cmd_type = vim.fn.getcmdtype()
+  if cmd_type == "/" then
     handle_mode_ime("search_slash", false)
-  elseif mode == "?" then
+  elseif cmd_type == "?" then
     handle_mode_ime("search_question", false)
+  elseif cmd_type == ":" then
+    handle_mode_ime("cmdline_colon", false)
   else
+    -- Fallback to cmdline_colon for unknown types
     handle_mode_ime("cmdline_colon", false)
   end
 end
@@ -354,8 +375,11 @@ function M.setup(opts)
   end
 
   -- Cmdline mode autocommands
-  local cmdline_cfg = get_mode_config("cmdline")
-  if cmdline_cfg then
+  -- Check if ANY cmdline-related mode has config (cmdline, search_slash, search_question, cmdline_colon)
+  local has_cmdline = get_mode_config("cmdline") or get_mode_config("search_slash")
+                      or get_mode_config("search_question") or get_mode_config("cmdline_colon")
+  if has_cmdline then
+    debug_log(string.format("M.setup: registering CmdlineEnter/Leave autocommands (has_cmdline=%s)", tostring(has_cmdline)))
     vim.api.nvim_create_autocmd("CmdlineEnter", {
       group = group,
       callback = M.on_cmdline_enter,
@@ -367,23 +391,31 @@ function M.setup(opts)
       callback = M.on_cmdline_leave,
       desc = "im-select: handle IME on CmdlineLeave",
     })
+  else
+    debug_log("M.setup: skipping CmdlineEnter/Leave autocommands (no cmdline config)")
   end
 
   -- ModeChanged autocommand for all other modes
   local has_mode_changed = false
   for mode_name, mode_cfg in pairs(config.options.mode_config) do
-    if mode_cfg and mode_name ~= "insert" and mode_name ~= "cmdline" then
+    -- Skip insert and cmdline-related modes (they have dedicated autocommands)
+    if mode_cfg and mode_name ~= "insert" and mode_name ~= "cmdline"
+       and mode_name ~= "search_slash" and mode_name ~= "search_question"
+       and mode_name ~= "cmdline_colon" then
       has_mode_changed = true
       break
     end
   end
 
   if has_mode_changed then
+    debug_log("M.setup: registering ModeChanged autocommand")
     vim.api.nvim_create_autocmd("ModeChanged", {
       group = group,
       callback = M.on_mode_changed,
       desc = "im-select: handle IME on mode changes",
     })
+  else
+    debug_log("M.setup: skipping ModeChanged autocommand (no other modes configured)")
   end
 
   -- Clean up saved state when buffer is deleted
