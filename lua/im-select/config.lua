@@ -18,6 +18,9 @@ M.defaults = {
   -- Timeout in milliseconds for sync io.popen calls
   timeout = 200,
 
+  -- Enable debug logging
+  debug = false,
+
   -- Per-mode IME behavior configuration
   -- Options:
   --   "always_en" - always switch to English when entering/in this mode

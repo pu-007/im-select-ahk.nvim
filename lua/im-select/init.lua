@@ -7,6 +7,13 @@ local M = {}
 -- Buffer-local saved IME state for each mode
 local saved_im_state = {}
 
+-- Debug logging helper
+local function debug_log(msg)
+  if config.options.debug then
+    vim.notify("[DEBUG] " .. msg, vim.log.levels.DEBUG)
+  end
+end
+
 -- Build the command string for im-select.exe
 local function build_cmd(args)
   local opts = config.options
@@ -149,8 +156,8 @@ local function save_state_for_mode(bufnr, mode, state)
     saved_im_state[bufnr] = {}
   end
   saved_im_state[bufnr][mode] = state
-  vim.notify(string.format("[DEBUG] save_state_for_mode: bufnr=%d, mode=%s, state=%s, all_states=%s",
-    bufnr, mode, tostring(state), vim.inspect(saved_im_state[bufnr])), vim.log.levels.DEBUG)
+  debug_log(string.format("save_state_for_mode: bufnr=%d, mode=%s, state=%s, all_states=%s",
+    bufnr, mode, tostring(state), vim.inspect(saved_im_state[bufnr])))
 end
 
 -- Get saved IME state for a specific mode
@@ -182,8 +189,8 @@ local function handle_mode_ime(mode_name, entering)
 
   if not mode_cfg then return end
 
-  vim.notify(string.format("[DEBUG] handle_mode_ime: mode=%s, entering=%s, bufnr=%d, cfg=%s",
-    mode_name, tostring(entering), bufnr, tostring(mode_cfg)), vim.log.levels.DEBUG)
+  debug_log(string.format("handle_mode_ime: mode=%s, entering=%s, bufnr=%d, cfg=%s",
+    mode_name, tostring(entering), bufnr, tostring(mode_cfg)))
 
   if entering then
     -- Entering a mode
@@ -191,35 +198,35 @@ local function handle_mode_ime(mode_name, entering)
       -- Always switch to English
       if config.options.async then
         exec_async("get", function(result)
-          vim.notify(string.format("[DEBUG] always_en entering: got current state=%s", tostring(result)), vim.log.levels.DEBUG)
+          debug_log(string.format("always_en entering: got current state=%s", tostring(result)))
           if result then
             save_state_for_mode(bufnr, mode_name, result)
-            vim.notify(string.format("[DEBUG] saved state for mode %s: %s", mode_name, result), vim.log.levels.DEBUG)
+            debug_log(string.format("saved state for mode %s: %s", mode_name, result))
           end
           exec_async("set en", nil)
         end)
       else
         local current = exec_sync("get")
-        vim.notify(string.format("[DEBUG] always_en entering (sync): got current state=%s", tostring(current)), vim.log.levels.DEBUG)
+        debug_log(string.format("always_en entering (sync): got current state=%s", tostring(current)))
         if current then
           save_state_for_mode(bufnr, mode_name, current)
-          vim.notify(string.format("[DEBUG] saved state for mode %s: %s", mode_name, current), vim.log.levels.DEBUG)
+          debug_log(string.format("saved state for mode %s: %s", mode_name, current))
         end
         exec_sync("set en")
       end
     elseif mode_cfg == "restore" then
       -- Entering mode: restore saved state if any
       local saved = get_saved_state_for_mode(bufnr, mode_name)
-      vim.notify(string.format("[DEBUG] restore entering: saved state for mode %s = %s", mode_name, tostring(saved)), vim.log.levels.DEBUG)
+      debug_log(string.format("restore entering: saved state for mode %s = %s", mode_name, tostring(saved)))
       if saved and saved == "zh" then
-        vim.notify(string.format("[DEBUG] restoring to zh"), vim.log.levels.DEBUG)
+        debug_log("restoring to zh")
         if config.options.async then
           exec_async("set zh", nil)
         else
           exec_sync("set zh")
         end
       else
-        vim.notify(string.format("[DEBUG] no saved state or not zh, defaulting to en"), vim.log.levels.DEBUG)
+        debug_log("no saved state or not zh, defaulting to en")
         if config.options.async then
           exec_async("set en", nil)
         else
@@ -231,7 +238,7 @@ local function handle_mode_ime(mode_name, entering)
     -- Leaving a mode
     if mode_cfg == "always_en" then
       -- Ensure English when leaving
-      vim.notify(string.format("[DEBUG] always_en leaving: setting to en"), vim.log.levels.DEBUG)
+      debug_log("always_en leaving: setting to en")
       if config.options.async then
         exec_async("set en", nil)
       else
@@ -243,14 +250,14 @@ local function handle_mode_ime(mode_name, entering)
         exec_async("get", function(result)
           if result then
             save_state_for_mode(bufnr, mode_name, result)
-            vim.notify(string.format("[DEBUG] saved state for mode %s on leave: %s", mode_name, result), vim.log.levels.DEBUG)
+            debug_log(string.format("saved state for mode %s on leave: %s", mode_name, result))
           end
         end)
       else
         local current = exec_sync("get")
         if current then
           save_state_for_mode(bufnr, mode_name, current)
-          vim.notify(string.format("[DEBUG] saved state for mode %s on leave: %s", mode_name, current), vim.log.levels.DEBUG)
+          debug_log(string.format("saved state for mode %s on leave: %s", mode_name, current))
         end
       end
     end
@@ -269,23 +276,32 @@ end
 
 -- Called on CmdlineEnter
 function M.on_cmdline_enter()
-  handle_mode_ime("cmdline", true)
+  local mode = vim.fn.mode()
+  if mode == "/" or mode == "?" then
+    -- For search mode, handle IME for search independently
+    handle_mode_ime("search", true)
+  else
+    -- For command line (colon) mode, handle separately
+    handle_mode_ime("cmdline", true)
+  end
 end
 
 -- Called on CmdlineLeave
 function M.on_cmdline_leave()
-  handle_mode_ime("cmdline", false)
+  local mode = vim.fn.mode()
+  if mode == "/" or mode == "?" then
+    handle_mode_ime("search", false)
+  else
+    handle_mode_ime("cmdline", false)
+  end
 end
 
--- Called on ModeChanged to handle search mode and normal mode
+-- Called on ModeChanged to handle normal mode and other modes
 function M.on_mode_changed()
   local mode = vim.fn.mode()
   
-  -- Handle search mode (/ or ?)
-  if mode == "/" or mode == "?" then
-    handle_mode_ime("search", true)
   -- Handle normal mode
-  elseif mode == "n" then
+  if mode == "n" then
     handle_mode_ime("normal", true)
   -- Handle visual mode
   elseif mode == "v" or mode == "V" or mode == "\22" then
@@ -300,8 +316,8 @@ function M.on_mode_changed()
   elseif mode == "s" or mode == "S" or mode == "\19" then
     handle_mode_ime("select", true)
   else
-    -- Leaving other modes: handle leaving for search, visual, replace, terminal, select
-    handle_mode_ime("search", false)
+    -- Leaving other modes: handle leaving for visual, replace, terminal, select
+    -- Note: search mode is now handled independently in on_cmdline_enter/leave
     handle_mode_ime("visual", false)
     handle_mode_ime("replace", false)
     handle_mode_ime("terminal", false)
