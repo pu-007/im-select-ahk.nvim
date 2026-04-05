@@ -45,7 +45,7 @@ exe_path = "/mnt/c/Program Files/AutoHotkey/v2/AutoHotkey.exe /mnt/c/Users/你�
 
 ```lua
 {
-  "pu-007/im-select.nvim",
+  "pu-007/im-select-ahk.nvim",
   event = { "InsertEnter", "InsertLeave", "CmdlineEnter" },
   opts = {
     -- 可选配置，以下为默认值
