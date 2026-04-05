@@ -164,12 +164,12 @@ end
 local function get_saved_state_for_mode(bufnr, mode)
   if saved_im_state[bufnr] then
     local state = saved_im_state[bufnr][mode]
-    vim.notify(string.format("[DEBUG] get_saved_state_for_mode: bufnr=%d, mode=%s, state=%s, all_states=%s",
-      bufnr, mode, tostring(state), vim.inspect(saved_im_state[bufnr])), vim.log.levels.DEBUG)
+    debug_log(string.format("get_saved_state_for_mode: bufnr=%d, mode=%s, state=%s, all_states=%s",
+      bufnr, mode, tostring(state), vim.inspect(saved_im_state[bufnr])))
     return state
   end
-  vim.notify(string.format("[DEBUG] get_saved_state_for_mode: bufnr=%d, mode=%s, no saved states for this buffer",
-    bufnr, mode), vim.log.levels.DEBUG)
+  debug_log(string.format("get_saved_state_for_mode: bufnr=%d, mode=%s, no saved states for this buffer",
+    bufnr, mode))
   return nil
 end
 
@@ -277,22 +277,27 @@ end
 -- Called on CmdlineEnter
 function M.on_cmdline_enter()
   local mode = vim.fn.mode()
-  if mode == "/" or mode == "?" then
-    -- For search mode, handle IME for search independently
-    handle_mode_ime("search", true)
+  if mode == "/" then
+    -- For forward search mode
+    handle_mode_ime("search_slash", true)
+  elseif mode == "?" then
+    -- For backward search mode
+    handle_mode_ime("search_question", true)
   else
-    -- For command line (colon) mode, handle separately
-    handle_mode_ime("cmdline", true)
+    -- For command line (colon) mode
+    handle_mode_ime("cmdline_colon", true)
   end
 end
 
 -- Called on CmdlineLeave
 function M.on_cmdline_leave()
   local mode = vim.fn.mode()
-  if mode == "/" or mode == "?" then
-    handle_mode_ime("search", false)
+  if mode == "/" then
+    handle_mode_ime("search_slash", false)
+  elseif mode == "?" then
+    handle_mode_ime("search_question", false)
   else
-    handle_mode_ime("cmdline", false)
+    handle_mode_ime("cmdline_colon", false)
   end
 end
 
