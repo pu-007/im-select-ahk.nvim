@@ -93,30 +93,39 @@ source /path/to/im-select/zsh/im-select-vimmode.zsh
 /path/to/im-select/zsh/im-select-vimmode.zsh setup
 ```
 
+如果你使用 zinit, 可使用:
+
+```zsh
+zinit wait'!0' lucid is-snippet nocd for \
+  atinit'export IM_SELECT_EXE_PATH="/mnt/c/Users/zionpu/im-select.exe"' \
+    https://raw.githubusercontent.com/pu-007/im-select-ahk.nvim/refs/heads/main/zsh/im-select-vimmode.zsh
+
+```
+
 脚本会在进入 normal mode（按 ESC）时自动切换到英文，方便在 zsh 中编辑命令。
 
 ## 配置选项
 
-| 选项 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `exe_path` | string | 自动检测 | im-select.exe 的 WSL 路径 |
-| `toggle_key` | string | `"RShift"` | 回退模式的切换键 |
-| `ime_timeout` | number | `500` | SendMessageTimeoutW 超时时间（毫秒） |
-| `set_en_on_insert_leave` | boolean | `true` | 离开 Insert 模式时切换到英文 |
-| `restore_on_insert_enter` | boolean | `true` | 进入 Insert 模式时恢复之前的状态 |
-| `set_en_on_cmdline_enter` | boolean | `true` | 进入 Command-line 模式时切换到英文 |
-| `async` | boolean | `true` | 异步执行（推荐） |
-| `timeout` | number | `200` | 同步模式 io.popen 超时时间（毫秒） |
+| 选项                      | 类型    | 默认值     | 说明                                 |
+| ------------------------- | ------- | ---------- | ------------------------------------ |
+| `exe_path`                | string  | 自动检测   | im-select.exe 的 WSL 路径            |
+| `toggle_key`              | string  | `"RShift"` | 回退模式的切换键                     |
+| `ime_timeout`             | number  | `500`      | SendMessageTimeoutW 超时时间（毫秒） |
+| `set_en_on_insert_leave`  | boolean | `true`     | 离开 Insert 模式时切换到英文         |
+| `restore_on_insert_enter` | boolean | `true`     | 进入 Insert 模式时恢复之前的状态     |
+| `set_en_on_cmdline_enter` | boolean | `true`     | 进入 Command-line 模式时切换到英文   |
+| `async`                   | boolean | `true`     | 异步执行（推荐）                     |
+| `timeout`                 | number  | `200`      | 同步模式 io.popen 超时时间（毫秒）   |
 
 ## 命令
 
-| 命令 | 说明 |
-|------|------|
-| `:IMSelectGet` | 获取当前输入法状态 |
-| `:IMSelectSet en` | 切换到英文模式 |
-| `:IMSelectSet zh` | 切换到中文模式 |
-| `:IMSelectToggle` | 切换中英文 |
-| `:IMSelectCheck` | 运行健康检查 |
+| 命令              | 说明               |
+| ----------------- | ------------------ |
+| `:IMSelectGet`    | 获取当前输入法状态 |
+| `:IMSelectSet en` | 切换到英文模式     |
+| `:IMSelectSet zh` | 切换到中文模式     |
+| `:IMSelectToggle` | 切换中英文         |
+| `:IMSelectCheck`  | 运行健康检查       |
 
 ## im-select.exe 命令行用法
 
