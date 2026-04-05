@@ -12,16 +12,17 @@ local function build_cmd(args)
   local opts = config.options
   local cmd = opts.exe_path
 
+  -- Subcommand must come immediately after the exe path
+  if args then
+    cmd = cmd .. " " .. args
+  end
+
   if opts.toggle_key and opts.toggle_key ~= "" then
     cmd = cmd .. " --key " .. opts.toggle_key
   end
 
   if opts.ime_timeout and opts.ime_timeout > 0 then
     cmd = cmd .. " --timeout " .. tostring(opts.ime_timeout)
-  end
-
-  if args then
-    cmd = cmd .. " " .. args
   end
 
   return cmd
